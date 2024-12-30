@@ -9,5 +9,5 @@ export const AppDataSource = new DataSource({
     database: "ecommerce",
     entities: ["src/Entities/*{.ts,.js}"],
     synchronize: true,
-    logging: true
+    // logging: true
 });
