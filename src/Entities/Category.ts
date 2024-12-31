@@ -8,6 +8,7 @@ import {
     OneToMany,
 } from 'typeorm';
 import { Subcategory } from './Subcategory';
+import { Product } from './Product';
 
 @Entity('categories')
 export class Category {
@@ -38,6 +39,9 @@ export class Category {
 
     @OneToMany(() => Subcategory, subcategory => subcategory.category)
     subcategories: Subcategory[];
+
+    @OneToMany(() => Product, product => product.category)
+    products: Product[]
 
     @CreateDateColumn({ type: 'timestamp' })
     createdAt: Date;

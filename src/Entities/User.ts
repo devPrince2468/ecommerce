@@ -4,7 +4,7 @@ import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateCol
 @Entity("users")
 export class User {
     @PrimaryGeneratedColumn()
-    id: number
+    id: number | string
 
     @Column()
     @IsString()
@@ -30,6 +30,9 @@ export class User {
 
     @Column({ default: false })
     isVerified: boolean;
+
+    @Column({ default: "" })
+    refreshToken: string;
 
     @CreateDateColumn({ type: 'timestamp' })
     created_at: Date;

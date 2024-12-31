@@ -1,6 +1,6 @@
 import "reflect-metadata"
-import express, { Request, Response } from "express";
-import { User } from "./Entities/User";
+import express from "express";
+import cookieParser from 'cookie-parser';
 import { AppDataSource } from "./Utils/Database";
 import router from "./Routers";
 
@@ -8,6 +8,7 @@ import router from "./Routers";
 const PORT = 8080
 const app = express();
 app.use(express.json());
+app.use(cookieParser());
 
 // const AppDataSource = new DataSource({
 //     type: "postgres",

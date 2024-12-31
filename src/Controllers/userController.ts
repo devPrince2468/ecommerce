@@ -6,6 +6,7 @@ import { transporter } from "../Utils/Mail";
 import { v4 as uuidv4 } from 'uuid';
 import { verificationMail } from "../Utils/MailTemplate";
 import { RegisterUserRequest } from "../Interfaces/UserInterface";
+import { generateAccessToken, generateAccessTokenAndRefreshToken, generateRefreshToken } from "../Utils/Tokens";
 
 
 const VERIFICATION_ERRORS = {
@@ -148,12 +149,11 @@ const removeUser: RequestHandler = async (req: Request, res: Response): Promise<
 };
 
 const verifyUser: RequestHandler = async (req: Request, res: Response): Promise<void> => {
-    const { email, verificationCode } = req.params;
+    const { email, verificationCode } = req.query;
     try {
-        // const user = await userRepository.findOne({ where: { email: email } });
 
         // Input validation
-        if (!email || !verificationCode) {
+        if (!email || !verificationCode || typeof email !== "string") {
             res.status(400).json({
                 success: false,
                 message: 'Email and verification code are required'
@@ -162,7 +162,7 @@ const verifyUser: RequestHandler = async (req: Request, res: Response): Promise<
         }
 
         const user = await userRepository.findOne({
-            where: { email },
+            where: { email: email },
             select: ['id', 'email', 'isVerified', 'verificationCode', 'verificationCodeExpires']
         });
 
@@ -202,14 +202,16 @@ const verifyUser: RequestHandler = async (req: Request, res: Response): Promise<
         }
 
         // Update user verification status
-        await userRepository.update(
+        const response = await userRepository.update(
             { id: user.id },
             {
                 isVerified: true,
                 verificationCode: "",
-                verificationCodeExpires: ""
+                updated_at: new Date(),
+                created_at: user.created_at
             }
         );
+
 
         res.status(200).json({
             success: true,
@@ -228,6 +230,109 @@ const verifyUser: RequestHandler = async (req: Request, res: Response): Promise<
     }
 };
 
+const setTokensAndCookies = (res: Response, accessToken: string, refreshToken: string) => {
+    const options = {
+        httpOnly: true,
+        secure: true
+    };
+    res.cookie("accessToken", accessToken, options);
+    res.cookie("refreshToken", refreshToken, options);
+};
+
+const login: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+    const { email, password } = req.body;
+    let statusCode = 200;
+    let responseBody = {
+        success: true,
+        message: "Logged in successfully",
+        token: null as { accessToken: string; refreshToken: string } | null
+    };
+
+    try {
+        if (!email || !password) {
+            statusCode = 400;
+            responseBody = {
+                success: false,
+                message: "Email and Password are required",
+                token: null
+            };
+        } else {
+            const user = await userRepository.findOne({ where: { email } });
+
+            if (!user) {
+                statusCode = 404;
+                responseBody = {
+                    success: false,
+                    message: "User does not exist",
+                    token: null
+                };
+            } else {
+                const isPasswordValid = await bcrypt.compare(password, user.password);
+
+                if (isPasswordValid) {
+                    const { accessToken, refreshToken } = await generateAccessTokenAndRefreshToken(user.id);
+                    user.refreshToken = refreshToken;
+                    await userRepository.save(user);
+
+                    setTokensAndCookies(res, accessToken, refreshToken);
+
+                    responseBody.token = { accessToken, refreshToken };
+                } else {
+                    statusCode = 401;
+                    responseBody = {
+                        success: false,
+                        message: "Incorrect Password!",
+                        token: null
+                    };
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Login error", error);
+        statusCode = 500;
+        responseBody = {
+            success: false,
+            message: "An error occurred during login",
+            token: null
+        };
+    }
+
+    res.status(statusCode).json(responseBody);
+};
+
+interface CustomRequest extends Request {
+    user?: {
+        id: string | number;
+        email: string;
+    };
+}
+
+
+const logout = async (req: CustomRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.user?.id;
+
+        if (!userId) {
+            res.status(400).json({ success: false, message: "User ID not found" });
+        }
+
+
+        const result = await userRepository.update({ id: userId }, { refreshToken: undefined });
+
+        if (result.affected === 0) {
+            res.status(404).json({ success: false, message: "User not found" });
+        }
+
+
+        res.clearCookie('accessToken', { httpOnly: true, secure: true });
+        res.status(200).json({ success: true, message: "Logged out successfully" });
+
+    } catch (error) {
+        console.error("Error logging out", error);
+        res.status(500).json({ success: false, message: "Failed to log out" });
+    }
+};
+
 
 
 
@@ -235,5 +340,7 @@ export const userController = {
     register,
     getAllUsers,
     removeUser,
-    verifyUser
+    verifyUser,
+    login,
+    logout
 };
