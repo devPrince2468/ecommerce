@@ -1,7 +1,7 @@
 import { IsEmail, IsString, Matches, MinLength, validateOrReject } from "class-validator";
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
-@Entity()
+@Entity("users")
 export class User {
     @PrimaryGeneratedColumn()
     id: number
@@ -24,6 +24,18 @@ export class User {
 
     @Column({ unique: true, default: "" })
     verificationCode: string
+
+    @Column()
+    verificationCodeExpires: Date;
+
+    @Column({ default: false })
+    isVerified: boolean;
+
+    @CreateDateColumn({ type: 'timestamp' })
+    created_at: Date;
+
+    @UpdateDateColumn({ type: 'timestamp' })
+    updated_at: Date;
 
     async validate() {
         await validateOrReject(this);

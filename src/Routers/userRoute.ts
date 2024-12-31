@@ -5,6 +5,7 @@ import { userController } from "../Controllers/userController"
 const userRoute = express.Router()
 
 userRoute.post("/register", userController.register);
+userRoute.get("/verify-user", userController.verifyUser);
 userRoute.get("/get-all-users", userController.getAllUsers);
 userRoute.delete("/remove-user", userController.removeUser);
 

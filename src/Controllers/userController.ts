@@ -2,13 +2,24 @@ import { Request, RequestHandler, Response } from "express";
 import bcrypt from "bcryptjs";
 import { userRepository } from "../Repositories";
 import { QueryFailedError } from "typeorm";
-import { User } from "../Entities/User";
 import { transporter } from "../Utils/Mail";
-import nodemailer from "nodemailer"
 import { v4 as uuidv4 } from 'uuid';
+import { verificationMail } from "../Utils/MailTemplate";
+import { RegisterUserRequest } from "../Interfaces/UserInterface";
 
-const register: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+
+const VERIFICATION_ERRORS = {
+    USER_NOT_FOUND: 'User not found',
+    ALREADY_VERIFIED: 'User already verified',
+    INVALID_CODE: 'Invalid verification code',
+    CODE_EXPIRED: 'Verification code has expired',
+    SERVER_ERROR: 'Error verifying user'
+} as const;
+
+const register: RequestHandler = async (req: Request<{}, {}, RegisterUserRequest>, res: Response): Promise<void> => {
     const { firstName, email, password } = req.body;
+    const verificationCode = uuidv4();
+    const verificationCodeExpires = new Date(Date.now() + 2 * 60 * 1000);
     // Input validation
     if (!firstName || !email || !password) {
         res.status(400).json({
@@ -17,14 +28,16 @@ const register: RequestHandler = async (req: Request, res: Response): Promise<vo
         });
         return;
     }
-   
+
     try {
         // Create user instance
-        const user = new User();
-        user.firstName = firstName?.trim();
-        user.email = email?.trim().toLowerCase();
-        user.password = password;
-        user.verificationCode = uuidv4();
+        const user = userRepository.create({
+            email,
+            firstName,
+            password,
+            verificationCode,
+            verificationCodeExpires,
+        });
 
         // Validate user entity
         await user.validate();
@@ -40,24 +53,21 @@ const register: RequestHandler = async (req: Request, res: Response): Promise<vo
             to: email,
             subject: 'Nodemailer is unicode friendly ✔',
             text: 'Hello to myself!',
-            html: `<p><b>Hello</b> ${user.verificationCode} to myself!</p>`
+            html: verificationMail(verificationCode)
         };
 
-
-
-        // Save user
-        const registeredUser = await userRepository.save(user);
 
         transporter.sendMail(message, (err, info) => {
             if (err) {
                 console.log('Error occurred. ' + err.message);
                 return process.exit(1);
             }
-
-            console.log('Message sent: %s', info.messageId);
-            // Preview only available when sending through an Ethereal account
-            console.log('Preview URL: %s', nodemailer.getTestMessageUrl(info));
+            console.log('Message sent: %s', info);
         });
+
+        // Save user
+        const registeredUser = await userRepository.save(user);
+
 
         res.status(201).json({
             success: true,
@@ -65,7 +75,9 @@ const register: RequestHandler = async (req: Request, res: Response): Promise<vo
             user: {
                 id: registeredUser.id,
                 firstName: registeredUser.firstName,
-                email: registeredUser.email
+                email: registeredUser.email,
+                verificationCode: registeredUser.verificationCode,
+                verificationCodeExpires: registeredUser.verificationCodeExpires,
             }
         });
     } catch (error) {
@@ -135,11 +147,93 @@ const removeUser: RequestHandler = async (req: Request, res: Response): Promise<
     }
 };
 
+const verifyUser: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+    const { email, verificationCode } = req.params;
+    try {
+        // const user = await userRepository.findOne({ where: { email: email } });
+
+        // Input validation
+        if (!email || !verificationCode) {
+            res.status(400).json({
+                success: false,
+                message: 'Email and verification code are required'
+            });
+            return;
+        }
+
+        const user = await userRepository.findOne({
+            where: { email },
+            select: ['id', 'email', 'isVerified', 'verificationCode', 'verificationCodeExpires']
+        });
+
+        if (!user) {
+            res.status(404).json({
+                success: false,
+                message: VERIFICATION_ERRORS.USER_NOT_FOUND
+            });
+            return;
+        }
+
+        // Check verification status
+        if (user.isVerified) {
+            res.status(400).json({
+                success: false,
+                message: VERIFICATION_ERRORS.ALREADY_VERIFIED
+            });
+            return;
+        }
+
+        // Validate verification code
+        if (user.verificationCode !== verificationCode) {
+            res.status(400).json({
+                success: false,
+                message: VERIFICATION_ERRORS.INVALID_CODE
+            });
+            return;
+        }
+
+        // Check expiration
+        if (new Date() > user.verificationCodeExpires) {
+            res.status(400).json({
+                success: false,
+                message: VERIFICATION_ERRORS.CODE_EXPIRED
+            });
+            return;
+        }
+
+        // Update user verification status
+        await userRepository.update(
+            { id: user.id },
+            {
+                isVerified: true,
+                verificationCode: "",
+                verificationCodeExpires: ""
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "User verified successfully",
+            data: {
+                email: user.email,
+                isVerified: true
+            }
+        });
+    } catch (error) {
+        console.error("Error verifying user", error);
+        res.status(500).json({
+            success: false,
+            message: VERIFICATION_ERRORS.SERVER_ERROR
+        });
+    }
+};
+
 
 
 
 export const userController = {
     register,
     getAllUsers,
-    removeUser
+    removeUser,
+    verifyUser
 };
