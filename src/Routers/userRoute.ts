@@ -9,8 +9,8 @@ userRoute.post("/register", userController.register);
 userRoute.post("/login", userController.login);
 userRoute.post("/logout", auth, userController.logout);
 userRoute.get("/verify-user", userController.verifyUser);
-userRoute.get("/get-all-users", userController.getAllUsers);
-userRoute.delete("/remove-user", userController.removeUser);
+userRoute.get("/get-all-users", auth, userController.getAllUsers);
+userRoute.delete("/remove-user", auth, userController.removeUser);
 
 
 

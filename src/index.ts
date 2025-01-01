@@ -3,6 +3,8 @@ import express from "express";
 import cookieParser from 'cookie-parser';
 import { AppDataSource } from "./Utils/Database";
 import router from "./Routers";
+import "dotenv/config";
+import { Scheduler } from "./CronJobs/Scheduler";
 
 
 const PORT = 8080
@@ -22,12 +24,13 @@ app.use(cookieParser());
 //     logging: true
 // });
 
-app.use("/api", router)
+app.use("/api", router);
 
 AppDataSource.initialize().then((success) => {
     console.log("PostgreSQL Database connected!");
     app.listen(PORT, () => {
         console.log(`Server is running on : ${PORT}`);
+        Scheduler();
     })
 
 }).catch((err) => {

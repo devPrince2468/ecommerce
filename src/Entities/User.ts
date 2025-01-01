@@ -22,7 +22,7 @@ export class User {
     })
     password: string;
 
-    @Column({ unique: true, default: "" })
+    @Column({ unique: true, nullable: true })
     verificationCode: string
 
     @Column()

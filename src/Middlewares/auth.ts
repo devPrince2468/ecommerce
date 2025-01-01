@@ -34,7 +34,6 @@ export const auth = async (req: CustomRequest, res: Response, next: NextFunction
             return
         }
 
-        console.log("decodedToken", decodedToken);
         if (decodedToken && typeof decodedToken !== 'string' && 'userId' in decodedToken) {
             const user = await userRepository.findOne({ where: { id: decodedToken.userId } });
 
@@ -50,7 +49,7 @@ export const auth = async (req: CustomRequest, res: Response, next: NextFunction
             };
             return next();
         } else {
-            console.log("!Invalid token payload");
+            console.log("Invalid token payload");
             res.status(401).json({ success: false, message: "Invalid token payload" });
             return
         }
